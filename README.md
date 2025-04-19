@@ -4,6 +4,19 @@ This project is a Node.js application that listens for new blocks on the Monad b
 
 ---
 
+## 📖 About
+
+The Monad MCP Server is a lightweight blockchain listener that:
+
+- Connects to Monad testnet via Alchemy's RPC endpoint
+- Monitors new blocks in real-time
+- Provides a simple REST API to query the latest block data
+- Logs block numbers and transaction counts
+
+---
+
+Built with Node.js, it serves as both a blockchain monitor and API service for accessing basic chain information.
+
 ## 🚀 Features
 
 - Connects to Monad Testnet via Alchemy RPC.
