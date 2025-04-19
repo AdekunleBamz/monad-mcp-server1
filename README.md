@@ -74,5 +74,14 @@ npm start
 - The listener runs in real-time using `provider.on('block')`.
 - The `/latestblock` API returns the most recent block number and how many transactions it had.
 
+
+
+
+## 👤 Author
+GitHub: adekunlebamz
+
+
+
+
 ## 📝 License
 MIT – Do whatever you want with it 🚀
