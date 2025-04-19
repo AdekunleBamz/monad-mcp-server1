@@ -9,33 +9,46 @@ const PORT = process.env.PORT || 3000;
 const MONAD_RPC = 'https://monad-testnet.g.alchemy.com/v2/acJ8L47AMO3Z3rdE6am-qRh2jjvjL4dM';
 const provider = new ethers.JsonRpcProvider(MONAD_RPC);
 
-// ⏱️ Delay utility
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+// Variable to store the latest block number and transaction count
+let latestBlock = null;
+let latestBlockTxCount = 0;  // Store transaction count for the latest block
 
-// 🔒 To prevent overlapping block events
-let isProcessing = false;
+// 🧠 MCP Listener for new blocks with rate limiting (500ms delay)
+let lastBlockTime = 0;  // Store the timestamp of the last block processed
 
-// 🧠 MCP Listener for new blocks with 500ms delay
 provider.on('block', async (blockNumber) => {
-  if (isProcessing) return;
-  isProcessing = true;
+  const currentTime = Date.now();
 
-  try {
-    console.log(`🧱 New block received: ${blockNumber}`);
-
-    const block = await provider.getBlock(blockNumber);
-    console.log(`📦 Block ${blockNumber} has ${block.transactions.length} transactions`);
-  } catch (error) {
-    console.error(`❌ Error fetching block ${blockNumber}:`, error);
+  // Apply the rate limit (500ms delay)
+  if (currentTime - lastBlockTime < 500) {
+    return;  // Skip this block if it's too soon (less than 500ms)
   }
 
-  await delay(500);
-  isProcessing = false;
+  console.log(`🧱 New block received: ${blockNumber}`);
+  latestBlock = blockNumber;  // Update the latest block number
+
+  const block = await provider.getBlock(blockNumber);
+  latestBlockTxCount = block.transactions.length;  // Get the number of transactions in this block
+  console.log(`📦 Block ${blockNumber} has ${latestBlockTxCount} transactions`);
+
+  lastBlockTime = currentTime;  // Update the last block time
 });
 
 // 🚀 Basic server endpoint
 app.get('/', (req, res) => {
   res.send('🚀 Monad MCP Server with Alchemy RPC listener is running!');
+});
+
+// 🚀 Latest block endpoint (with transaction count)
+app.get('/latestblock', (req, res) => {
+  if (latestBlock !== null) {
+    res.json({ 
+      latestBlock, 
+      transactions: latestBlockTxCount 
+    });
+  } else {
+    res.status(404).send('No blocks received yet');
+  }
 });
 
 // Check connection with Alchemy RPC on start
