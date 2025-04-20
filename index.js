@@ -67,7 +67,17 @@ startBlockListener();
 
 // HTTP Routes
 app.get('/', (req, res) => {
-  res.send('🚀 Monad MCP Server is live!');
+    res.send(`
+        <h2>🚀 Monad MCP Server is Live</h2>
+        <p>This server connects to the Monad Testnet via Alchemy RPC.</p>
+        <ul>
+          <li>🔁 Listens for new blocks in real-time</li>
+          <li>📦 Tracks the latest block number and its transaction count</li>
+          <li>🧠 Powered by Node.js, Express, and Ethers.js</li>
+          <li>🌐 API Endpoint: <code>/latestblock</code> returns JSON data with block number and transaction count</li>
+        </ul>
+        <p>Use this server to fetch up-to-date data from the Monad blockchain. Ideal for integrations, dashboards, and block explorers.</p>
+      `);      
 });
 
 app.get('/latestblock', (req, res) => {
