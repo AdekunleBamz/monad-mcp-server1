@@ -1,86 +1,73 @@
 const express = require('express');
 const { ethers } = require('ethers');
 const path = require('path');
+const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// RPC Connection
 const MONAD_RPC = process.env.MONAD_RPC;
 const provider = new ethers.JsonRpcProvider(MONAD_RPC);
 
-app.use(express.static(path.join(__dirname, 'public')));
-
-// 🧠 Listen for new blocks
-let latestBlock = null;
-let latestBlockTxCount = 0;
-let lastBlockTime = 0;
-
-provider.on('block', async (blockNumber) => {
-  const now = Date.now();
-  if (now - lastBlockTime < 500) return;
-
+// API Endpoints
+app.get('/latestblock', async (req, res) => {
   try {
+    const blockNumber = await provider.getBlockNumber();
     const block = await provider.getBlock(blockNumber);
-    latestBlock = blockNumber;
-    latestBlockTxCount = block.transactions.length;
-    lastBlockTime = now;
-    console.log(`📦 Block ${blockNumber}: ${latestBlockTxCount} txs`);
+    res.json({
+      latestBlock: blockNumber,
+      transactions: block.transactions.length
+    });
   } catch (err) {
-    console.error('Error fetching block:', err.message);
+    console.error('Latest block error:', err);
+    res.status(500).json({ error: 'Failed to fetch block' });
   }
 });
 
-// 🛠️ API Route for Latest Block
-app.get('/latestblock', (req, res) => {
-  if (latestBlock !== null) {
-    res.json({ latestBlock, transactions: latestBlockTxCount });
-  } else {
-    res.status(404).send('No blocks received yet');
-  }
-});
-
-// 🛠️ New API Route for Searching by Hash or Address
 app.get('/search/:query', async (req, res) => {
   const query = req.params.query;
+  
+  // Input validation
+  if (!query || !query.startsWith('0x') || query.length < 42) {
+    return res.status(400).json({ error: 'Invalid input format' });
+  }
 
   try {
     let txData;
-    if (ethers.utils.isAddress(query)) {
-      // Fetch all transactions from the address (basic example, could be improved)
+    if (ethers.isAddress(query)) {
       txData = await provider.getHistory(query);
-    } else if (ethers.utils.isHexString(query)) {
-      // Fetch transaction details by hash
+    } else if (ethers.isHexString(query)) {
       txData = await provider.getTransaction(query);
+      if (!txData) return res.status(404).json({ error: 'Transaction not found' });
     } else {
-      return res.status(400).send('Invalid address or hash');
+      return res.status(400).json({ error: 'Invalid address or hash' });
     }
 
-    if (txData) {
-      // Fetch the block information
-      const block = await provider.getBlock(txData.blockNumber);
-      res.json({
-        transaction: txData,
-        block: block,
-      });
-    } else {
-      res.status(404).send('Transaction or address not found');
-    }
+    const block = await provider.getBlock(txData.blockNumber || txData[0]?.blockNumber);
+    res.json({ transaction: txData, block });
   } catch (err) {
-    res.status(500).send('Error fetching data: ' + err.message);
+    console.error('Search error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// 🌐 Fallback route for frontend
+// Fallback route
 app.use((req, res) => {
   res.sendFile(path.resolve(__dirname, 'public', 'index.html'));
 });
 
-// ✅ Test connection on startup
+// Start server
 provider.getBlockNumber()
-  .then((n) => console.log(`✅ Connected to RPC! Current Block: ${n}`))
-  .catch((err) => console.error('RPC error:', err.message));
+  .then(n => console.log(`✅ Connected to RPC. Current block: ${n}`))
+  .catch(err => console.error('RPC error:', err));
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
