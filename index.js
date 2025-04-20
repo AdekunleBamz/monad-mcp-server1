@@ -5,61 +5,79 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ✅ Alchemy RPC setup
-const MONAD_RPC = 'https://monad-testnet.g.alchemy.com/v2/acJ8L47AMO3Z3rdE6am-qRh2jjvjL4dM';
-const provider = new ethers.JsonRpcProvider(MONAD_RPC);
+const MONAD_RPC = process.env.MONAD_RPC || 'https://monad-testnet.g.alchemy.com/v2/your-key-here';
 
-// Variable to store the latest block number and transaction count
+let provider;
 let latestBlock = null;
-let latestBlockTxCount = 0;  // Store transaction count for the latest block
+let latestBlockTxCount = 0;
+let lastBlockTime = 0;
 
-// 🧠 MCP Listener for new blocks with rate limiting (500ms delay)
-let lastBlockTime = 0;  // Store the timestamp of the last block processed
+function startBlockListener() {
+  provider = new ethers.JsonRpcProvider(MONAD_RPC);
 
-provider.on('block', async (blockNumber) => {
-  const currentTime = Date.now();
+  provider.on('block', async (blockNumber) => {
+    const currentTime = Date.now();
+    if (currentTime - lastBlockTime < 500) return;
 
-  // Apply the rate limit (500ms delay)
-  if (currentTime - lastBlockTime < 500) {
-    return;  // Skip this block if it's too soon (less than 500ms)
-  }
+    try {
+      console.log(`🧱 New block: ${blockNumber}`);
+      latestBlock = blockNumber;
 
-  console.log(`🧱 New block received: ${blockNumber}`);
-  latestBlock = blockNumber;  // Update the latest block number
+      const block = await provider.getBlock(blockNumber);
+      latestBlockTxCount = block.transactions.length;
+      console.log(`📦 Block ${blockNumber} has ${latestBlockTxCount} txs`);
 
-  const block = await provider.getBlock(blockNumber);
-  latestBlockTxCount = block.transactions.length;  // Get the number of transactions in this block
-  console.log(`📦 Block ${blockNumber} has ${latestBlockTxCount} transactions`);
-
-  lastBlockTime = currentTime;  // Update the last block time
-});
-
-// 🚀 Basic server endpoint
-app.get('/', (req, res) => {
-  res.send('🚀 Monad MCP Server with Alchemy RPC listener is running!');
-});
-
-// 🚀 Latest block endpoint (with transaction count)
-app.get('/latestblock', (req, res) => {
-  if (latestBlock !== null) {
-    res.json({ 
-      latestBlock, 
-      transactions: latestBlockTxCount 
-    });
-  } else {
-    res.status(404).send('No blocks received yet');
-  }
-});
-
-// Check connection with Alchemy RPC on start
-provider.getBlockNumber()
-  .then((blockNumber) => {
-    console.log(`Connected to Alchemy RPC successfully! Current Block Number: ${blockNumber}`);
-  })
-  .catch((error) => {
-    console.error('Error connecting to Alchemy RPC:', error);
+      lastBlockTime = currentTime;
+    } catch (err) {
+      console.error('Error processing block:', err.message);
+    }
   });
 
+  provider._websocket?.on('close', (code) => {
+    console.error(`❌ WebSocket closed with code ${code}. Reconnecting in 3s...`);
+    retryConnection();
+  });
+
+  provider._websocket?.on('error', (err) => {
+    console.error('❌ WebSocket error:', err.message);
+    retryConnection();
+  });
+
+  provider.getBlockNumber()
+    .then(blockNumber => {
+      console.log(`✅ Connected to Monad RPC! Current block: ${blockNumber}`);
+    })
+    .catch(err => {
+      console.error('❌ Failed to connect:', err.message);
+      retryConnection();
+    });
+}
+
+function retryConnection() {
+  // Clear all existing listeners and retry after 3s
+  if (provider) provider.removeAllListeners();
+  setTimeout(() => {
+    console.log('🔄 Retrying connection...');
+    startBlockListener();
+  }, 3000);
+}
+
+// Start listener
+startBlockListener();
+
+// HTTP Routes
+app.get('/', (req, res) => {
+  res.send('🚀 Monad MCP Server is live!');
+});
+
+app.get('/latestblock', (req, res) => {
+  if (latestBlock !== null) {
+    res.json({ latestBlock, transactions: latestBlockTxCount });
+  } else {
+    res.status(404).send('No blocks yet.');
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`🌐 Server running on http://localhost:${PORT}`);
 });
