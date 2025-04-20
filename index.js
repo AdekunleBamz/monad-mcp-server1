@@ -6,19 +6,16 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Serve static files from the "public" directory
-app.use(express.static(path.join(__dirname, 'public')));
-
-// ✅ Alchemy RPC setup
 const MONAD_RPC = process.env.MONAD_RPC;
 const provider = new ethers.JsonRpcProvider(MONAD_RPC);
 
-// MCP Block data
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 🧠 Listen for new blocks
 let latestBlock = null;
 let latestBlockTxCount = 0;
 let lastBlockTime = 0;
 
-// 🧠 Listen for new blocks
 provider.on('block', async (blockNumber) => {
   const now = Date.now();
   if (now - lastBlockTime < 500) return;
@@ -34,7 +31,7 @@ provider.on('block', async (blockNumber) => {
   }
 });
 
-// 🛠️ API Route for the latest block
+// 🛠️ API Route for Latest Block
 app.get('/latestblock', (req, res) => {
   if (latestBlock !== null) {
     res.json({ latestBlock, transactions: latestBlockTxCount });
@@ -43,8 +40,39 @@ app.get('/latestblock', (req, res) => {
   }
 });
 
-// 🌐 Fallback route for frontend - serve index.html
-app.get('/', (req, res) => {
+// 🛠️ New API Route for Searching by Hash or Address
+app.get('/search/:query', async (req, res) => {
+  const query = req.params.query;
+
+  try {
+    let txData;
+    if (ethers.utils.isAddress(query)) {
+      // Fetch all transactions from the address (basic example, could be improved)
+      txData = await provider.getHistory(query);
+    } else if (ethers.utils.isHexString(query)) {
+      // Fetch transaction details by hash
+      txData = await provider.getTransaction(query);
+    } else {
+      return res.status(400).send('Invalid address or hash');
+    }
+
+    if (txData) {
+      // Fetch the block information
+      const block = await provider.getBlock(txData.blockNumber);
+      res.json({
+        transaction: txData,
+        block: block,
+      });
+    } else {
+      res.status(404).send('Transaction or address not found');
+    }
+  } catch (err) {
+    res.status(500).send('Error fetching data: ' + err.message);
+  }
+});
+
+// 🌐 Fallback route for frontend
+app.use((req, res) => {
   res.sendFile(path.resolve(__dirname, 'public', 'index.html'));
 });
 
@@ -53,7 +81,6 @@ provider.getBlockNumber()
   .then((n) => console.log(`✅ Connected to RPC! Current Block: ${n}`))
   .catch((err) => console.error('RPC error:', err.message));
 
-// Start the server
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });

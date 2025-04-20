@@ -1,82 +1,60 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Monad MCP Block Explorer</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f0f0f0;
-      padding: 2rem;
-      text-align: center;
-    }
-    .card {
-      background: white;
-      padding: 1.5rem;
-      max-width: 400px;
-      margin: auto;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-      border-radius: 10px;
-    }
-    .status {
-      margin: 1rem 0;
-      font-weight: bold;
-    }
-    button {
-      margin-top: 1rem;
-      padding: 0.5rem 1rem;
-      font-size: 16px;
-    }
-    .footer {
-      margin-top: 2rem;
-      font-size: 0.9rem;
-    }
-  </style>
-</head>
-<body>
-  <h1>Monad MCP Block Explorer</h1>
-  <p>Track latest blocks and transaction stats from Monad Testnet</p>
+const express = require('express');
+const { ethers } = require('ethers');
+const path = require('path');
+require('dotenv').config();
 
-  <div class="status" id="status">🔴 Not Connected</div>
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-  <div class="card">
-    <h2>Latest Block</h2>
-    <p id="block-number">-</p>
-    <p id="tx-count">-</p>
-  </div>
+// Alchemy RPC setup (replace with your RPC URL)
+const MONAD_RPC = process.env.MONAD_RPC;
+const provider = new ethers.JsonRpcProvider(MONAD_RPC);
 
-  <button onclick="fetchData()">🔄 Refresh</button>
+// Serve static files from the "public" directory
+app.use(express.static(path.join(__dirname, 'public')));
 
-  <div class="footer">
-    API: <a href="/latestblock" target="_blank">/latestblock</a>
-  </div>
+// API Route to search by address or hash
+app.get('/search/:query', async (req, res) => {
+  const query = req.params.query;
 
-  <script>
-    async function fetchData() {
-      const statusEl = document.getElementById('status');
-      const blockEl = document.getElementById('block-number');
-      const txEl = document.getElementById('tx-count');
-
-      statusEl.textContent = '🟡 Connecting...';
-
-      try {
-        const res = await fetch('/latestblock');
-        if (!res.ok) throw new Error('Failed to fetch');
-        const data = await res.json();
-        statusEl.textContent = '🟢 Connected';
-        blockEl.textContent = 'Block #' + data.latestBlock;
-        txEl.textContent = 'Transactions: ' + data.transactions;
-      } catch (err) {
-        statusEl.textContent = '🔴 Not Connected';
-        blockEl.textContent = '-';
-        txEl.textContent = '-';
-      }
+  try {
+    let txData;
+    if (ethers.utils.isAddress(query)) {
+      // Fetch all transactions from the address (basic example)
+      txData = await provider.getHistory(query);
+    } else if (ethers.utils.isHexString(query)) {
+      // Fetch transaction by hash
+      txData = await provider.getTransaction(query);
+    } else {
+      return res.status(400).send('Invalid address or hash');
     }
 
-    // Auto-refresh every 10 seconds
-    setInterval(fetchData, 10000);
-    fetchData();
-  </script>
-</body>
-</html>
+    if (txData) {
+      // Fetch the block information
+      const block = await provider.getBlock(txData.blockNumber);
+      res.json({
+        transaction: txData,
+        block: block,
+      });
+    } else {
+      res.status(404).send('Transaction or address not found');
+    }
+  } catch (err) {
+    res.status(500).send('Error fetching data: ' + err.message);
+  }
+});
+
+// Fallback route for frontend
+app.use((req, res) => {
+  res.sendFile(path.resolve(__dirname, 'public', 'index.html'));
+});
+
+// Test connection to RPC on startup
+provider.getBlockNumber()
+  .then((n) => console.log(`✅ Connected to RPC! Current Block: ${n}`))
+  .catch((err) => console.error('RPC error:', err.message));
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
+});
