@@ -1,60 +1,99 @@
-const express = require('express');
-const { ethers } = require('ethers');
-const path = require('path');
-require('dotenv').config();
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Monad MCP Block Explorer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f7fafc;
+      padding: 20px;
+      text-align: center;
+    }
+    input, button {
+      padding: 10px;
+      margin: 10px 5px;
+      border-radius: 5px;
+    }
+    .result, .block-info, .status {
+      margin-top: 20px;
+      padding: 15px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Monad MCP Block Explorer</h1>
+  <p>Track latest blocks and search transactions from Monad Testnet</p>
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+  <!-- Search Box -->
+  <input type="text" id="queryInput" placeholder="Enter address or tx hash" />
+  <button onclick="handleSearch()">Search</button>
 
-// Alchemy RPC setup (replace with your RPC URL)
-const MONAD_RPC = process.env.MONAD_RPC;
-const provider = new ethers.JsonRpcProvider(MONAD_RPC);
+  <!-- Status Indicator -->
+  <div class="status" id="status">🔴 Not Connected</div>
 
-// Serve static files from the "public" directory
-app.use(express.static(path.join(__dirname, 'public')));
+  <!-- Latest Block Display -->
+  <div class="block-info" id="latestBlock">Loading latest block...</div>
 
-// API Route to search by address or hash
-app.get('/search/:query', async (req, res) => {
-  const query = req.params.query;
+  <!-- Search Results -->
+  <div class="result" id="searchResult"></div>
 
-  try {
-    let txData;
-    if (ethers.utils.isAddress(query)) {
-      // Fetch all transactions from the address (basic example)
-      txData = await provider.getHistory(query);
-    } else if (ethers.utils.isHexString(query)) {
-      // Fetch transaction by hash
-      txData = await provider.getTransaction(query);
-    } else {
-      return res.status(400).send('Invalid address or hash');
+  <script>
+    const statusEl = document.getElementById("status");
+    const latestBlockEl = document.getElementById("latestBlock");
+    const resultEl = document.getElementById("searchResult");
+
+    async function fetchLatestBlock() {
+      try {
+        const res = await fetch("https://monad-mcp-server1.onrender.com/latestblock");
+        const data = await res.json();
+        latestBlockEl.innerHTML = `
+          <strong>Latest Block:</strong> #${data.latestBlock}<br>
+          <strong>Transactions:</strong> ${data.transactions}
+        `;
+        statusEl.innerText = "🟢 Connected";
+      } catch (err) {
+        latestBlockEl.innerText = "Error fetching latest block.";
+        statusEl.innerText = "🔴 Not Connected";
+      }
     }
 
-    if (txData) {
-      // Fetch the block information
-      const block = await provider.getBlock(txData.blockNumber);
-      res.json({
-        transaction: txData,
-        block: block,
-      });
-    } else {
-      res.status(404).send('Transaction or address not found');
+    async function handleSearch() {
+      const query = document.getElementById("queryInput").value.trim();
+      if (!query) return;
+
+      resultEl.innerHTML = "Searching...";
+      try {
+        const res = await fetch(`https://monad-mcp-server1.onrender.com/search/${query}`);
+        if (!res.ok) throw new Error("Not found");
+        const data = await res.json();
+
+        const tx = data.transaction;
+        const blk = data.block;
+
+        resultEl.innerHTML = `
+          <h3>Transaction Details</h3>
+          <p><strong>Hash:</strong> ${tx.hash}</p>
+          <p><strong>From:</strong> ${tx.from}</p>
+          <p><strong>To:</strong> ${tx.to}</p>
+          <p><strong>Block Number:</strong> ${blk.number}</p>
+          <p><strong>Timestamp:</strong> ${new Date(blk.timestamp * 1000).toLocaleString()}</p>
+        `;
+      } catch (err) {
+        resultEl.innerHTML = `<p style="color: red;">Transaction or address not found.</p>`;
+      }
     }
-  } catch (err) {
-    res.status(500).send('Error fetching data: ' + err.message);
-  }
-});
 
-// Fallback route for frontend
-app.use((req, res) => {
-  res.sendFile(path.resolve(__dirname, 'public', 'index.html'));
-});
-
-// Test connection to RPC on startup
-provider.getBlockNumber()
-  .then((n) => console.log(`✅ Connected to RPC! Current Block: ${n}`))
-  .catch((err) => console.error('RPC error:', err.message));
-
-// Start the server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
+    // Refresh block every 10s
+    fetchLatestBlock();
+    setInterval(fetchLatestBlock, 10000);
+  </script>
+</body>
+</html>
