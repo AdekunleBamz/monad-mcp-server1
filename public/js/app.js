@@ -8,6 +8,9 @@ const searchBtn = document.getElementById('search-btn');
 const errorMessage = document.getElementById('error-message');
 const resultsContainer = document.getElementById('results-container');
 
+// State
+let currentBlock = { number: 0, txs: 0 };
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   fetchLatestBlock();
@@ -17,33 +20,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Event Listeners
 function setupEventListeners() {
-  refreshBtn.addEventListener('click', fetchLatestBlock);
+  refreshBtn.addEventListener('click', () => fetchLatestBlock(false, true));
   searchBtn.addEventListener('click', handleSearch);
-  searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleSearch();
-  });
+  searchInput.addEventListener('keypress', (e) => e.key === 'Enter' && handleSearch());
 }
 
-// Live Updates
+// Live Updates (Polling)
 function startLiveUpdates() {
   setInterval(() => fetchLatestBlock(true), 5000); // Update every 5s
 }
 
 // Fetch Latest Block
-async function fetchLatestBlock(silent = false) {
-  try {
-    if (!silent) {
-      refreshBtn.disabled = true;
-      refreshBtn.textContent = 'Loading...';
-    }
+async function fetchLatestBlock(silent = false, force = false) {
+  if (!silent) {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = 'Refreshing...';
+  }
 
+  try {
     const response = await fetch('/latestblock');
     if (!response.ok) throw new Error('Network error');
     
-    const data = await response.json();
-    if (data.error) throw new Error(data.error);
-    
-    updateBlockUI(data);
+    const { success, latestBlock, transactions, uiMessage, error } = await response.json();
+    if (error) throw new Error(uiMessage);
+
+    // Only update UI if block changed or forced
+    if (force || latestBlock !== currentBlock.number) {
+      currentBlock = { number: latestBlock, txs: transactions };
+      latestBlock.textContent = `Block #${latestBlock}`;
+      latestTxCount.textContent = `Transactions: ${transactions}`;
+      connectionStatus.textContent = '✅ Connected';
+      if (uiMessage) console.log(uiMessage); // Optional: log server messages
+    }
   } catch (error) {
     connectionStatus.textContent = '❌ Disconnected';
     if (!silent) showError(error.message);
@@ -59,21 +67,19 @@ async function fetchLatestBlock(silent = false) {
 async function handleSearch() {
   const query = searchInput.value.trim();
   if (!query) {
-    showError('Please enter a search term');
+    showError('Please enter an address or transaction hash');
     return;
   }
 
-  try {
-    resultsContainer.innerHTML = '<p>Searching...</p>';
-    errorMessage.style.display = 'none';
+  showLoading();
+  errorMessage.style.display = 'none';
 
+  try {
     const response = await fetch(`/search/${query}`);
-    if (!response.ok) throw new Error('Search failed');
+    const { success, data, uiMessage, error } = await response.json();
     
-    const data = await response.json();
-    if (data.error) throw new Error(data.error);
-    
-    displayResults(data);
+    if (error) throw new Error(uiMessage);
+    displayResults(data, uiMessage);
   } catch (error) {
     showError(error.message);
     resultsContainer.innerHTML = '';
@@ -81,50 +87,27 @@ async function handleSearch() {
 }
 
 // Display Results
-function displayResults(data) {
-  resultsContainer.innerHTML = '';
-
-  if (Array.isArray(data.transaction)) {
-    // Address results
-    const heading = document.createElement('h3');
-    heading.textContent = `Transactions for: ${searchInput.value}`;
-    resultsContainer.appendChild(heading);
-
-    if (data.transaction.length === 0) {
-      resultsContainer.innerHTML += '<p>No transactions found</p>';
-      return;
-    }
-
-    data.transaction.forEach(tx => {
-      resultsContainer.appendChild(createTxElement(tx));
-    });
-  } else {
-    // Single transaction
-    resultsContainer.appendChild(createTxElement(data.transaction, data.block));
-  }
-}
-
-// Create Transaction Element
-function createTxElement(tx, block = null) {
-  const element = document.createElement('div');
-  element.className = 'transaction';
-  
-  element.innerHTML = `
-    <p><strong>Hash:</strong> ${tx.hash}</p>
-    <p><strong>From:</strong> ${tx.from}</p>
-    ${tx.to ? `<p><strong>To:</strong> ${tx.to}</p>` : ''}
-    <p><strong>Value:</strong> ${ethers.formatEther(tx.value)} MONAD</p>
-    ${block ? `<p><strong>Block:</strong> #${block.number}</p>` : ''}
+function displayResults(data, message) {
+  resultsContainer.innerHTML = `
+    <div class="result-header">
+      <h3>${message}</h3>
+      <p>Mined in Block #${data.block.number}</p>
+    </div>
+    ${data.transactions.map(tx => `
+      <div class="transaction-card">
+        <p><strong>Hash:</strong> ${tx.hash}</p>
+        <p><strong>From:</strong> ${tx.from}</p>
+        ${tx.to ? `<p><strong>To:</strong> ${tx.to}</p>` : ''}
+        <p><strong>Value:</strong> ${ethers.formatEther(tx.value)} MONAD</p>
+        <p><strong>Gas:</strong> ${tx.gasLimit.toString()}</p>
+      </div>
+    `).join('')}
   `;
-  
-  return element;
 }
 
-// Helpers
-function updateBlockUI(data) {
-  latestBlock.textContent = `Block: #${data.latestBlock}`;
-  latestTxCount.textContent = `Transactions: ${data.transactions}`;
-  connectionStatus.textContent = '✅ Connected';
+// UI Helpers
+function showLoading() {
+  resultsContainer.innerHTML = '<div class="loading">🔍 Searching blockchain...</div>';
 }
 
 function showError(message) {

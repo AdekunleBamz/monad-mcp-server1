@@ -3,40 +3,101 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Monad Block Explorer</title>
+  <title>Monad MCP Block Explorer</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-    .header { background: #6200ea; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-    .status-card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    #search-input { width: 100%; padding: 10px; margin-bottom: 10px; }
-    button { background: #6200ea; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
-    .error { color: red; margin: 10px 0; }
-    .transaction { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 4px; }
+    :root {
+      --primary: #6200ea;
+      --error: #d32f2f;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f8f9fa;
+    }
+    .header {
+      background: var(--primary);
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    #connection-status::before {
+      content: "● ";
+      color: #4caf50;
+    }
+    .loading {
+      padding: 20px;
+      text-align: center;
+      color: #666;
+    }
+    .transaction-card {
+      border: 1px solid #eee;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 8px;
+    }
+    .error {
+      color: var(--error);
+      padding: 10px;
+      background: #ffebee;
+      border-radius: 4px;
+    }
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>Monad Block Explorer</h1>
-    <p>Search transactions and view real-time blocks</p>
+    <h1>Monad MCP Block Explorer</h1>
+    <p>Track real-time blocks and transactions</p>
   </div>
 
-  <div class="status-card">
-    <h3>Network Status</h3>
-    <p id="connection-status">Loading...</p>
+  <div class="card">
+    <h2>Network Status</h2>
+    <p id="connection-status">Connecting...</p>
     <p id="latest-block">Block: #-</p>
     <p id="latest-tx-count">Transactions: -</p>
     <button id="refresh-btn">Refresh</button>
   </div>
 
-  <div class="status-card">
-    <h3>Search</h3>
-    <input type="text" id="search-input" placeholder="Enter address or transaction hash (0x...)">
+  <div class="card">
+    <h2>Search Transactions</h2>
+    <input 
+      type="text" 
+      id="search-input" 
+      placeholder="Enter 0x address or transaction hash"
+      pattern="^0x[a-fA-F0-9]{40,64}$"
+      title="Must start with 0x and be 40-64 characters"
+    >
     <button id="search-btn">Search</button>
     <div id="error-message" class="error" style="display: none;"></div>
   </div>
 
-  <div id="results-container"></div>
+  <div id="results-container" class="card"></div>
 
+  <script src="https://cdn.ethers.io/v5/ethers.min.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>
